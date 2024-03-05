@@ -2,6 +2,9 @@ import OpenAI from 'openai';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import debug from 'debug';
+import {writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import ora from 'ora';
 
 const openai = new OpenAI();
 const ASSISTANT_ID = 'asst_JeSpGEvms6Mpup5NFhG4lnrm';
@@ -12,14 +15,21 @@ const apiDebug = debug('widget api');
 const WIDGET_PATH =
   '/Users/felix/Library/Application Support/Übersicht/widgets';
 
+async function writeWidget(id, body) {
+  writeFile(join(WIDGET_PATH, `${id}.jsx`), body);
+}
+
 const widgetAPI = {
   addWidget: async ({body}) => {
     apiDebug('adding widget:\n%s', body);
-    return 'new-widget';
+    const id = 'new-widget';
+    await writeWidget(id, body);
+    return id;
   },
 
   updateWidget: async ({id, body}) => {
     apiDebug('updating widget', id);
+    await writeWidget(id, body);
     return true;
   },
 };
@@ -29,17 +39,23 @@ async function main() {
   let thread = await openai.beta.threads.create();
   const context = {thread, assistant};
 
-  const handleError = (err) => {
+  const cleanUpThread = async () => {
+    if (thread) {
+      aiDebug('cleaning up thread %s', thread.id);
+      await openai.beta.threads.del(thread.id);
+      thread = undefined;
+    }
+  };
+
+  const handleError = async (err) => {
+    await cleanUpThread();
     console.error(err);
     process.exit(1);
   };
 
   process.on('beforeExit', async () => {
-    if (thread) {
-      await openai.beta.threads.del(thread.id);
-      thread = undefined;
-      console.log('Good bye!');
-    }
+    await cleanUpThread();
+    console.log('Good bye!');
   });
   process.on('unhandledRejection', handleError);
   process.on('uncaughtException', handleError);
@@ -48,15 +64,18 @@ async function main() {
     const answer = await inquirer.prompt({
       type: 'input',
       name: 'userInput',
-      message: 'ü>',
+      message: chalk.magenta('>'),
+      prefix: chalk.magenta('✧'),
     });
+
+    const spinner = ora().start();
     const run = await sendMessage(context, answer.userInput);
     const messages = await completeRun(run);
 
     messages.data[0].content.forEach((content) => {
       content.type === 'text'
-        ? console.log(chalk.magenta(content.text.value))
-        : console.log(content);
+        ? spinner.succeed(chalk.green(content.text.value))
+        : spinner.succeed(content);
     });
   }
 }
@@ -66,9 +85,11 @@ async function sendMessage({thread, assistant}, content) {
     role: 'user',
     content,
   });
+  aiDebug('message created %s', content);
   const run = await openai.beta.threads.runs.create(thread.id, {
     assistant_id: assistant.id,
   });
+  aiDebug('run created %s', run.id);
   return run;
 }
 
