@@ -43,7 +43,7 @@
                 initWithInteractionEnabled: interactionEnabled
             ];
             [windows setObject:windowGroup forKey:screenId];
-            [windowGroup loadUrl: [self screenUrl:screenId baseUrl:baseUrl]];
+            [windowGroup loadUrl:[self screenUrl:screenId screenName:screens[screenId] baseUrl:baseUrl]];
         } else {
             windowGroup = windows[screenId];
             if (forceRefresh) {
@@ -88,7 +88,7 @@
 - (NSScreen*)getNSScreen:(NSNumber*)screenId
 {
     for (NSScreen* screen in [NSScreen screens]) {
-        if ([screen deviceDescription][@"NSScreenNumber"] == screenId) {
+        if ([[screen deviceDescription][@"NSScreenNumber"] isEqualToNumber:screenId]) {
             return screen;
         }
     };
@@ -170,14 +170,13 @@
     }
 }
 
-- (NSURL*)screenUrl:(NSNumber*)screenId baseUrl:(NSURL*)baseUrl
+- (NSURL*)screenUrl: (NSNumber*)screenId screenName:(NSString*)screenName baseUrl:(NSURL*)baseUrl
 {
-    return [baseUrl
-        URLByAppendingPathComponent:[NSString
-            stringWithFormat:@"%@",
-            screenId
-        ]
-    ];
+    NSURL *baseWithPath = [baseUrl URLByAppendingPathComponent:[screenId stringValue]];
+    NSURLComponents *components = [NSURLComponents componentsWithURL:baseWithPath resolvingAgainstBaseURL:NO];
+    NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:screenName];
+    components.queryItems = @[nameItem];
+    return components.URL;
 }
 
 @end
